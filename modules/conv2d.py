@@ -14,7 +14,9 @@ class Conv2D(Layer):
         
         # MODIFICAR: Añadir nuevo if-else para otros algoritmos de convolución
         if conv_algo == 0:
-            self.mode = 'direct' 
+            self.mode = 'direct'
+        elif conv_algo == 1:
+            self.mode = 'vect' 
         else:
             print(f"Algoritmo {conv_algo} no soportado aún")
             self.mode = 'direct' 
@@ -60,6 +62,8 @@ class Conv2D(Layer):
         # PISTA: Usar estos if-else si implementas más algoritmos de convolución
         if self.mode == 'direct':
             return self._forward_direct(input)
+        elif self.mode == 'vect':
+            return self._forward_vect(input)
         else:
             raise ValueError("Mode must be 'direct")
 
@@ -70,7 +74,7 @@ class Conv2D(Layer):
         else:
             raise ValueError("Mode must be 'direct' or 'im2col'")
 
-    # --- DIRECT IMPLEMENTATION ---
+    # # --- DIRECT IMPLEMENTATION ---
 
     def _forward_direct(self, input):
         batch_size, _, in_h, in_w = input.shape
@@ -97,7 +101,44 @@ class Conv2D(Layer):
                 output[b, out_c] += self.biases[out_c]
 
         return output
+    
+    
+    def _forward_vect(self, input):
+        # --- INICIO BLOQUE GENERADO CON IA ---
+        batch_size, in_c, in_h, in_w = input.shape
+        k_h, k_w = self.kernel_size, self.kernel_size
+        S = self.stride
+        out_c = self.out_channels
 
+        if self.padding > 0:
+            input_padded = np.pad(input, ((0, 0), (0, 0), (self.padding, self.padding), (self.padding, self.padding)), mode='constant')
+        else:
+            input_padded = input
+
+        out_h = (input_padded.shape[2] - k_h) // S + 1
+        out_w = (input_padded.shape[3] - k_w) // S + 1
+        output = np.zeros((batch_size, out_c, out_h, out_w), dtype=np.float32)
+
+        # OPTIMIZACIÓN NIVEL MEDIO: Eliminamos los bucles i, j
+        for b in range(batch_size):
+            for oc in range(out_c):
+                for ic in range(in_c):
+                    # Filtro de 3x3 (o kernel_size)
+                    kernel = self.kernels[oc, ic]
+                    
+                    # En lugar de recorrer la imagen píxel a píxel (1024 veces),
+                    # recorremos solo el tamaño del filtro (9 veces)
+                    for kh in range(k_h):
+                        for kw in range(k_w):
+                            # Este 'slice' de NumPy selecciona todos los píxeles 
+                            # de salida afectados por el peso kernel[kh, kw]
+                            output[b, oc] += input_padded[b, ic, kh:kh+out_h*S:S, kw:kw+out_w*S:S] * kernel[kh, kw]
+                
+                output[b, oc] += self.biases[oc]
+
+        return output
+        # --- FIN BLOQUE GENERADO CON IA ---
+    
     def _backward_direct(self, grad_output, learning_rate):
         batch_size, _, out_h, out_w = grad_output.shape
         _, _, in_h, in_w = self.input.shape
