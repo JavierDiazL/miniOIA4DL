@@ -16,7 +16,9 @@ class Conv2D(Layer):
         if conv_algo == 0:
             self.mode = 'direct'
         elif conv_algo == 1:
-            self.mode = 'vect' 
+            self.mode = 'vect'
+        elif conv_algo == 2:
+            self.mode = 'im2colgemm' 
         else:
             print(f"Algoritmo {conv_algo} no soportado aún")
             self.mode = 'direct' 
@@ -64,6 +66,8 @@ class Conv2D(Layer):
             return self._forward_direct(input)
         elif self.mode == 'vect':
             return self._forward_vect(input)
+        elif self.mode == 'im2colgemm':
+            return self._forward_im2colgemm(input)
         else:
             raise ValueError("Mode must be 'direct")
 
@@ -119,7 +123,7 @@ class Conv2D(Layer):
         out_w = (input_padded.shape[3] - k_w) // S + 1
         output = np.zeros((batch_size, out_c, out_h, out_w), dtype=np.float32)
 
-        # OPTIMIZACIÓN NIVEL MEDIO: Eliminamos los bucles i, j
+        # OPTIMIZACIÓN: Eliminamos los bucles i, j
         for b in range(batch_size):
             for oc in range(out_c):
                 for ic in range(in_c):
@@ -138,6 +142,60 @@ class Conv2D(Layer):
 
         return output
         # --- FIN BLOQUE GENERADO CON IA ---
+
+    def im2col(self, input):
+        
+        batch_size, in_c, in_h, in_w = input.shape
+        k_h, k_w = self.kernel_size, self.kernel_size
+        S = self.stride
+
+        if self.padding > 0:
+            input_padded = np.pad(input, ((0, 0), (0, 0), (self.padding, self.padding), (self.padding, self.padding)), mode='constant')
+        else:
+            input_padded = input
+
+        out_h = (input_padded.shape[2] - k_h) // S + 1
+        out_w = (input_padded.shape[3] - k_w) // S + 1
+
+        # --- INICIO BLOQUE GENERADO CON IA ---
+        cols = np.zeros((batch_size, in_c * k_h * k_w, out_h * out_w), dtype=np.float32)
+
+        for b in range(batch_size):
+            col_idx = 0
+            for i in range(0, out_h * S, S):
+                for j in range(0, out_w * S, S):
+                    patch = input_padded[b, :, i:i+k_h, j:j+k_w].reshape(-1)
+                    cols[b, :, col_idx] = patch
+                    col_idx += 1
+
+        return cols
+        # --- FIN BLOQUE GENERADO CON IA ---
+
+    def _forward_im2colgemm(self, input):
+
+        batch_size, in_c, in_h, in_w = input.shape
+        k_h, k_w = self.kernel_size, self.kernel_size
+        S = self.stride
+
+        if self.padding > 0:
+            input_padded = np.pad(input, ((0, 0), (0, 0), (self.padding, self.padding), (self.padding, self.padding)), mode='constant')
+        else:
+            input_padded = input
+
+        out_h = (input_padded.shape[2] - k_h) // S + 1
+        out_w = (input_padded.shape[3] - k_w) // S + 1
+
+        cols = self.im2col(input)
+        kernel_reshape = self.kernels.reshape(self.out_channels, -1) 
+
+        output = kernel_reshape @ cols
+
+        # --- INICIO BLOQUE GENERADO CON IA ---
+        output = output.reshape(batch_size, self.out_channels, out_h, out_w)
+        # --- FIN BLOQUE GENERADO CON IA ---
+        
+        return output
+
     
     def _backward_direct(self, grad_output, learning_rate):
         batch_size, _, out_h, out_w = grad_output.shape

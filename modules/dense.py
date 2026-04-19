@@ -29,7 +29,10 @@ class Dense(Layer):
 
         output = np.zeros((batch_size, self.out_features),dtype=np.float32)
  
-        output = matmul_biasses(self.input, self.weights, output, self.biases)
+        # output = matmul_biasses(self.input, self.weights, output, self.biases)
+        # self.output = output
+        # GEMM Numpy BLAS
+        output = self.input @ self.weights + self.biases
         self.output = output
         return output
 

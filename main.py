@@ -24,7 +24,7 @@ def main(model_name, batch_size, epochs, learning_rate, conv_algo, performance, 
     elif model_name == 'TinyCNN':
         model = TinyCNN(conv_algo=conv_algo)
     elif model_name == 'OIANet':
-        model = OIANET_CIFAR100(conv_algo=conv_algo)
+        model = OIANET_CIFAR100(conv_algo=2)
     else:
         model = ResNet18_CIFAR100(conv_algo=conv_algo)
 
